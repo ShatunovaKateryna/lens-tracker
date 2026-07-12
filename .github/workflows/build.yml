@@ -26,10 +26,12 @@ jobs:
               libncursesw5-dev libtinfo-dev cmake libffi-dev libssl-dev \
               build-essential
 
-      - name: Встановити buildozer і cython
+      - name: Встановити buildozer (закріплені стабільні версії)
         run: |
           pip install --upgrade pip
-          pip install buildozer cython==0.29.36
+          pip install cython==0.29.33
+          pip install buildozer==1.5.0
+          pip install python-for-android==2024.1.21
 
       - name: Зібрати APK
         run: |
