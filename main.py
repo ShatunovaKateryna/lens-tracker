@@ -13,6 +13,7 @@ from datetime import date
 from kivy.app import App
 from kivy.utils import platform
 from kivy.lang import Builder
+from kivy.factory import Factory
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.widget import Widget
 from kivy.uix.popup import Popup
@@ -494,7 +495,7 @@ class LensTrackerRoot(BoxLayout):
         grid.bind(minimum_height=grid.setter("height"))
         for i in range(TOTAL_DAYS):
             # Використовуємо ToggleButton замість дрібного CheckBox
-            cb = Builder.template('DayToggleButton')
+            cb = Factory.DayToggleButton()
             cb.text = f"День\\n{i + 1}"
             cb.size_hint_y = None
             cb.height = dp(75)
