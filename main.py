@@ -19,7 +19,7 @@ from kivy.uix.widget import Widget
 from kivy.uix.popup import Popup
 from kivy.uix.togglebutton import ToggleButton
 from kivy.uix.label import Label
-from kivy.properties import NumericProperty, ObjectProperty, BooleanProperty, StringProperty
+from kivy.properties import NumericProperty, StringProperty
 from kivy.metrics import dp
 
 TOTAL_DAYS = 30
@@ -186,9 +186,8 @@ KV = '''
                 valign: 'middle'
             Switch:
                 id: enable_switch
-                active: root.reminder_enabled
         Label:
-            text: "{:02d}:{:02d}".format(root.hour, root.minute)
+            text: "%02d:%02d" % (my_clock.hour, my_clock.minute)
             font_size: '42sp'
             bold: True
             size_hint_y: None
@@ -200,30 +199,26 @@ KV = '''
             spacing: dp(10)
             RoundedButton:
                 text: 'Години'
-                on_release: clock.time_mode = 'hour'
+                on_release: my_clock.time_mode = 'hour'
                 canvas.before:
                     Color:
-                        rgba: (0.1, 0.5, 0.7, 1) if clock.time_mode == 'hour' else (0.3, 0.3, 0.3, 1)
+                        rgba: (0.1, 0.5, 0.7, 1) if my_clock.time_mode == 'hour' else (0.3, 0.3, 0.3, 1)
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
                         radius: [dp(10)]
             RoundedButton:
                 text: 'Хвилини'
-                on_release: clock.time_mode = 'minute'
+                on_release: my_clock.time_mode = 'minute'
                 canvas.before:
                     Color:
-                        rgba: (0.1, 0.5, 0.7, 1) if clock.time_mode == 'minute' else (0.3, 0.3, 0.3, 1)
+                        rgba: (0.1, 0.5, 0.7, 1) if my_clock.time_mode == 'minute' else (0.3, 0.3, 0.3, 1)
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
                         radius: [dp(10)]
         AnalogClock:
-            id: clock
-            hour: root.hour
-            minute: root.minute
-            on_hour: root.hour = self.hour
-            on_minute: root.minute = self.minute
+            id: my_clock
         BoxLayout:
             size_hint_y: None
             height: dp(50)
@@ -455,19 +450,20 @@ class DatePickerPopup(Popup):
         self.dismiss()
 
 class TimePickerPopup(Popup):
-    reminder_enabled = BooleanProperty(False)
-    hour = NumericProperty(12)
-    minute = NumericProperty(0)
-
     def __init__(self, current_data, on_save_callback, **kwargs):
         super().__init__(**kwargs)
         self.on_save_callback = on_save_callback
-        self.reminder_enabled = current_data["reminder_enabled"]
-        self.hour = current_data["reminder_hour"]
-        self.minute = current_data["reminder_minute"]
+        # Задаємо стартові значення прямо звідси без складних прив'язок
+        self.ids.enable_switch.active = current_data["reminder_enabled"]
+        self.ids.my_clock.hour = current_data["reminder_hour"]
+        self.ids.my_clock.minute = current_data["reminder_minute"]
 
     def save_time(self):
-        self.on_save_callback(self.ids.enable_switch.active, self.hour, self.minute)
+        self.on_save_callback(
+            self.ids.enable_switch.active,
+            self.ids.my_clock.hour,
+            self.ids.my_clock.minute
+        )
         self.dismiss()
 
 class ConfirmPopup(Popup):
