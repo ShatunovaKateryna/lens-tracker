@@ -35,7 +35,6 @@ KV = '''
     background_color: 0, 0, 0, 0
     background_normal: ''
     color: 1, 1, 1, 1
-    # Захист від виходу тексту за межі:
     text_size: self.width - dp(10), self.height - dp(10)
     halign: 'center'
     valign: 'middle'
@@ -61,6 +60,19 @@ KV = '''
     canvas.before:
         Color:
             rgba: (0.2, 0.7, 0.4, 1) if self.state == 'down' else (0.3, 0.3, 0.35, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(8)]
+
+<CalendarDayButton@ToggleButton>:
+    background_color: 0, 0, 0, 0
+    background_normal: ''
+    background_down: ''
+    color: 1, 1, 1, 1
+    canvas.before:
+        Color:
+            rgba: (0.1, 0.5, 0.7, 1) if self.state == 'down' else (0, 0, 0, 0)
         RoundedRectangle:
             pos: self.pos
             size: self.size
@@ -176,7 +188,7 @@ KV = '''
                 id: enable_switch
                 active: root.reminder_enabled
         Label:
-            text: f"{root.hour:02d}:{root.minute:02d}"
+            text: "{:02d}:{:02d}".format(root.hour, root.minute)
             font_size: '42sp'
             bold: True
             size_hint_y: None
@@ -274,7 +286,7 @@ KV = '''
     padding: dp(15)
     canvas.before:
         Color:
-            rgba: 0.08, 0.1, 0.12, 1  # Темний сучасний фон
+            rgba: 0.08, 0.1, 0.12, 1
         Rectangle:
             pos: self.pos
             size: self.size
@@ -358,7 +370,6 @@ def default_data():
 # ---------- Логіка Кастомних Віджетів ----------
 
 class AnalogClock(Widget):
-    """Віджет аналогового годинника для інтерактивного вибору часу."""
     hour = NumericProperty(12)
     minute = NumericProperty(0)
     time_mode = StringProperty('hour')
@@ -378,7 +389,6 @@ class AnalogClock(Widget):
         dx = touch.x - cx
         dy = touch.y - cy
         
-        # Обчислюємо кут відносно 12 годин (верх)
         angle = math.degrees(math.atan2(dx, dy))
         if angle < 0: 
             angle += 360
@@ -393,7 +403,6 @@ class AnalogClock(Widget):
             self.minute = m
 
 class DatePickerPopup(Popup):
-    """Календар для вибору дати."""
     def __init__(self, current_data, on_save_callback, **kwargs):
         super().__init__(**kwargs)
         self.on_save_callback = on_save_callback
@@ -421,20 +430,14 @@ class DatePickerPopup(Popup):
             grid.add_widget(Label()) 
 
         for day in range(1, num_days + 1):
-            btn = ToggleButton(
+            btn = Factory.CalendarDayButton(
                 text=str(day),
                 group='calendar_days',
                 state='down' if (day == self.selected_date.day and 
                                  self.display_date.month == self.selected_date.month and 
                                  self.display_date.year == self.selected_date.year) else 'normal'
             )
-            # Прив'язка лямбда-функції
             btn.bind(on_release=lambda b, d=day: self.select_day(d))
-            
-            # Стиль для кнопок календаря
-            btn.background_color = (0,0,0,0)
-            btn.background_normal = ''
-            btn.background_down = ''
             grid.add_widget(btn)
 
     def select_day(self, day):
@@ -452,7 +455,6 @@ class DatePickerPopup(Popup):
         self.dismiss()
 
 class TimePickerPopup(Popup):
-    """Спливаюче вікно для налаштувань часу та сповіщень."""
     reminder_enabled = BooleanProperty(False)
     hour = NumericProperty(12)
     minute = NumericProperty(0)
@@ -494,9 +496,8 @@ class LensTrackerRoot(BoxLayout):
         grid = self.ids.checkbox_grid
         grid.bind(minimum_height=grid.setter("height"))
         for i in range(TOTAL_DAYS):
-            # Використовуємо ToggleButton замість дрібного CheckBox
             cb = Factory.DayToggleButton()
-            cb.text = f"День\\n{i + 1}"
+            cb.text = f"День\n{i + 1}"
             cb.size_hint_y = None
             cb.height = dp(75)
             cb.bind(state=self.make_checkbox_callback(i))
