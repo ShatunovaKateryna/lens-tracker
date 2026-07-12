@@ -670,7 +670,12 @@ class LensTrackerRoot(BoxLayout):
             self.data["reminder_enabled"] = enabled
             self.data["reminder_hour"] = hour
             self.data["reminder_minute"] = minute
+
+            # Скидаємо дату, щоб можна було тестувати кілька разів на день!
+            self.data["last_notified_date"] = ""
+
             self.save_data()
+
         TimePickerPopup(self.data, on_save).open()
 
     def open_reset_popup(self):
@@ -683,10 +688,21 @@ class LensTrackerRoot(BoxLayout):
 
 class LensTrackerApp(App):
     def build(self):
+        self.request_android_permissions()  # Викликаємо запит дозволів
+
         self.title = "Lens Tracker"
         self.root_widget = LensTrackerRoot(self)
         self.start_notifier_service()
         return self.root_widget
+
+    def request_android_permissions(self):
+        # Запитуємо дозвіл ТІЛЬКИ якщо це Android
+        if platform == "android":
+            try:
+                from android.permissions import request_permissions, Permission
+                request_permissions([Permission.POST_NOTIFICATIONS])
+            except Exception as e:
+                pass
 
     def start_notifier_service(self):
         if platform != "android":
@@ -696,7 +712,7 @@ class LensTrackerApp(App):
             service = autoclass("org.example.lenstracker.ServiceNotifier")
             python_activity = autoclass("org.kivy.android.PythonActivity")
             service.start(python_activity.mActivity, "")
-        except Exception:
+        except Exception as e:
             pass
 
 
