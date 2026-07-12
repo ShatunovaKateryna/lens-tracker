@@ -26,6 +26,10 @@ android.api = 33
 android.ndk = 25b
 android.archs = arm64-v8a
 
+# Закріплюємо стабільний реліз python-for-android (Python 3.11),
+# бо гілка master вже перейшла на Python 3.14, з якою pyjnius/kivy 2.3.0 несумісні
+p4a.branch = v2024.01.21
+
 # Дозволи: сповіщення (Android 13+ вимагає окремий дозвіл) та вібрація/вихід у мережу не потрібні
 android.permissions = POST_NOTIFICATIONS
 
