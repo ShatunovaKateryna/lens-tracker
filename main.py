@@ -22,7 +22,7 @@ from kivy.uix.label import Label
 # ДОДАНО: BooleanProperty для безпечної ініціалізації вікна сповіщень
 from kivy.properties import NumericProperty, StringProperty, BooleanProperty
 from kivy.metrics import dp
-
+from kivy.uix.floatlayout import FloatLayout
 TOTAL_DAYS = 30
 DATA_FILE_NAME = "lens_data.json"
 MONTHS_UKR = ['Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень', 
@@ -80,7 +80,7 @@ KV = '''
             radius: [dp(8)]
 
 <AnalogClock>:
-    canvas:
+    canvas.before:
         # Фон циферблата
         Color:
             rgba: 0.85, 0.9, 0.95, 1
@@ -88,6 +88,7 @@ KV = '''
             pos: self.center_x - min(self.width, self.height)/2, self.center_y - min(self.width, self.height)/2
             size: min(self.width, self.height), min(self.width, self.height)
         
+    canvas.after:
         # Годинна стрілка
         Color:
             rgba: 0.2, 0.2, 0.2, 1
@@ -122,6 +123,56 @@ KV = '''
         Ellipse:
             pos: self.center_x - dp(6), self.center_y - dp(6)
             size: dp(12), dp(12)
+
+    # Розміщуємо цифри по колу за допомогою математики
+    Label:
+        text: "12"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x - self.width/2, root.center_y + min(root.width, root.height)/2 * 0.7 - self.height/2
+    Label:
+        text: "3"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x + min(root.width, root.height)/2 * 0.7 - self.width/2, root.center_y - self.height/2
+    Label:
+        text: "6"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x - self.width/2, root.center_y - min(root.width, root.height)/2 * 0.7 - self.height/2
+    Label:
+        text: "9"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x - min(root.width, root.height)/2 * 0.7 - self.width/2, root.center_y - self.height/2
+    Label:
+        text: "1"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x + min(root.width, root.height)/2 * 0.7 * math.sin(math.radians(30)) - self.width/2, root.center_y + min(root.width, root.height)/2 * 0.7 * math.cos(math.radians(30)) - self.height/2
+    Label:
+        text: "2"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x + min(root.width, root.height)/2 * 0.7 * math.sin(math.radians(60)) - self.width/2, root.center_y + min(root.width, root.height)/2 * 0.7 * math.cos(math.radians(60)) - self.height/2
+    Label:
+        text: "4"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x + min(root.width, root.height)/2 * 0.7 * math.sin(math.radians(120)) - self.width/2, root.center_y + min(root.width, root.height)/2 * 0.7 * math.cos(math.radians(120)) - self.height/2
+    Label:
+        text: "5"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x + min(root.width, root.height)/2 * 0.7 * math.sin(math.radians(150)) - self.width/2, root.center_y + min(root.width, root.height)/2 * 0.7 * math.cos(math.radians(150)) - self.height/2
+    Label:
+        text: "7"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x + min(root.width, root.height)/2 * 0.7 * math.sin(math.radians(210)) - self.width/2, root.center_y + min(root.width, root.height)/2 * 0.7 * math.cos(math.radians(210)) - self.height/2
+    Label:
+        text: "8"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x + min(root.width, root.height)/2 * 0.7 * math.sin(math.radians(240)) - self.width/2, root.center_y + min(root.width, root.height)/2 * 0.7 * math.cos(math.radians(240)) - self.height/2
+    Label:
+        text: "10"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x + min(root.width, root.height)/2 * 0.7 * math.sin(math.radians(300)) - self.width/2, root.center_y + min(root.width, root.height)/2 * 0.7 * math.cos(math.radians(300)) - self.height/2
+    Label:
+        text: "11"
+        color: 0.2, 0.2, 0.2, 1
+        pos: root.center_x + min(root.width, root.height)/2 * 0.7 * math.sin(math.radians(330)) - self.width/2, root.center_y + min(root.width, root.height)/2 * 0.7 * math.cos(math.radians(330)) - self.height/2
 
 <DatePickerPopup>:
     title: "Вибір дати відкриття"
@@ -187,7 +238,6 @@ KV = '''
                 valign: 'middle'
             Switch:
                 id: enable_switch
-                # ОНОВЛЕНО: безпечна прив'язка до властивості
                 active: root.start_enabled
         Label:
             text: "%02d:%02d" % (my_clock.hour, my_clock.minute)
@@ -202,29 +252,29 @@ KV = '''
             spacing: dp(10)
             RoundedButton:
                 text: 'Години'
-                on_release: my_clock.time_mode = 'hour'
+                on_release: root.time_mode = 'hour'
                 canvas.before:
                     Color:
-                        rgba: (0.1, 0.5, 0.7, 1) if my_clock.time_mode == 'hour' else (0.3, 0.3, 0.3, 1)
+                        rgba: (0.1, 0.5, 0.7, 1) if root.time_mode == 'hour' else (0.3, 0.3, 0.3, 1)
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
                         radius: [dp(10)]
             RoundedButton:
                 text: 'Хвилини'
-                on_release: my_clock.time_mode = 'minute'
+                on_release: root.time_mode = 'minute'
                 canvas.before:
                     Color:
-                        rgba: (0.1, 0.5, 0.7, 1) if my_clock.time_mode == 'minute' else (0.3, 0.3, 0.3, 1)
+                        rgba: (0.1, 0.5, 0.7, 1) if root.time_mode == 'minute' else (0.3, 0.3, 0.3, 1)
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
                         radius: [dp(10)]
         AnalogClock:
             id: my_clock
-            # ОНОВЛЕНО: безпечна прив'язка до властивостей
             hour: root.start_hour
             minute: root.start_minute
+            time_mode: root.time_mode
         BoxLayout:
             size_hint_y: None
             height: dp(50)
@@ -370,7 +420,7 @@ def default_data():
 
 # ---------- Логіка Кастомних Віджетів ----------
 
-class AnalogClock(Widget):
+class AnalogClock(FloatLayout):
     hour = NumericProperty(12)
     minute = NumericProperty(0)
     time_mode = StringProperty('hour')
@@ -460,6 +510,7 @@ class TimePickerPopup(Popup):
     start_enabled = BooleanProperty(False)
     start_hour = NumericProperty(20)
     start_minute = NumericProperty(0)
+    time_mode = StringProperty('hour')
 
     def __init__(self, current_data, on_save_callback, **kwargs):
         # Встановлюємо значення ПЕРЕД викликом super(), щоб Kivy безпечно підтягнув їх у KV
