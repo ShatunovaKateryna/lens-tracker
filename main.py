@@ -246,6 +246,33 @@ KV = '''
             size_hint_y: None
             height: dp(50)
             color: 0.1, 0.5, 0.7, 1
+            
+        # НОВИЙ РЯДОК: Перемикач часу доби
+        BoxLayout:
+            size_hint_y: None
+            height: dp(40)
+            spacing: dp(10)
+            RoundedButton:
+                text: 'Ранок (00-11)'
+                on_release: root.is_am_mode = True
+                canvas.before:
+                    Color:
+                        rgba: (0.1, 0.5, 0.7, 1) if root.is_am_mode else (0.3, 0.3, 0.3, 1)
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(10)]
+            RoundedButton:
+                text: 'Вечір (12-23)'
+                on_release: root.is_am_mode = False
+                canvas.before:
+                    Color:
+                        rgba: (0.1, 0.5, 0.7, 1) if not root.is_am_mode else (0.3, 0.3, 0.3, 1)
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(10)]
+
         BoxLayout:
             size_hint_y: None
             height: dp(40)
@@ -275,6 +302,7 @@ KV = '''
             hour: root.start_hour
             minute: root.start_minute
             time_mode: root.time_mode
+            is_am: root.is_am_mode
         BoxLayout:
             size_hint_y: None
             height: dp(50)
@@ -424,6 +452,16 @@ class AnalogClock(FloatLayout):
     hour = NumericProperty(12)
     minute = NumericProperty(0)
     time_mode = StringProperty('hour')
+    is_am = BooleanProperty(True)
+
+    def on_is_am(self, instance, value):
+        # Автоматично коригуємо час при перемиканні Ранок/Вечір
+        if value:
+            if self.hour >= 12:
+                self.hour -= 12
+        else:
+            if self.hour < 12:
+                self.hour += 12
 
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
@@ -439,19 +477,20 @@ class AnalogClock(FloatLayout):
         cx, cy = self.center
         dx = touch.x - cx
         dy = touch.y - cy
-        
+
         angle = math.degrees(math.atan2(dx, dy))
-        if angle < 0: 
+        if angle < 0:
             angle += 360
 
         if self.time_mode == 'hour':
             h = int((angle + 15) // 30) % 12
-            if h == 0: 
-                h = 12
-            self.hour = h
+            # Зберігаємо реальний 24-годинний формат
+            if self.is_am:
+                self.hour = 0 if h == 0 else h
+            else:
+                self.hour = 12 if h == 0 else h + 12
         else:
-            m = int((angle + 3) // 6) % 60
-            self.minute = m
+            self.minute = int((angle + 3) // 6) % 60
 
 class DatePickerPopup(Popup):
     def __init__(self, current_data, on_save_callback, **kwargs):
@@ -505,19 +544,21 @@ class DatePickerPopup(Popup):
         self.on_save_callback(self.selected_date.day, self.selected_date.month, self.selected_date.year)
         self.dismiss()
 
+
 class TimePickerPopup(Popup):
-    # ОНОВЛЕНО: Використовуємо властивості для безпечної ініціалізації
     start_enabled = BooleanProperty(False)
     start_hour = NumericProperty(20)
     start_minute = NumericProperty(0)
     time_mode = StringProperty('hour')
+    is_am_mode = BooleanProperty(False)
 
     def __init__(self, current_data, on_save_callback, **kwargs):
-        # Встановлюємо значення ПЕРЕД викликом super(), щоб Kivy безпечно підтягнув їх у KV
         self.start_enabled = current_data.get("reminder_enabled", False)
         self.start_hour = current_data.get("reminder_hour", 20)
         self.start_minute = current_data.get("reminder_minute", 0)
-        
+        # Визначаємо, ранок зараз чи вечір
+        self.is_am_mode = self.start_hour < 12
+
         super().__init__(**kwargs)
         self.on_save_callback = on_save_callback
 
