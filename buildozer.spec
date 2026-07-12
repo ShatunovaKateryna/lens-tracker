@@ -10,7 +10,7 @@ source.include_exts = py,png,jpg,kv,atlas
 version = 1.0
 
 # Бібліотеки застосунку - тільки ті, що офіційно підтримуються python-for-android
-requirements = python3,kivy==2.3.0,plyer
+requirements = python3,kivy==2.4.0,plyer
 
 orientation = portrait
 fullscreen = 0
