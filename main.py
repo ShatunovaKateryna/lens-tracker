@@ -453,10 +453,11 @@ class TimePickerPopup(Popup):
     def __init__(self, current_data, on_save_callback, **kwargs):
         super().__init__(**kwargs)
         self.on_save_callback = on_save_callback
-        # Задаємо стартові значення прямо звідси без складних прив'язок
-        self.ids.enable_switch.active = current_data["reminder_enabled"]
-        self.ids.my_clock.hour = current_data["reminder_hour"]
-        self.ids.my_clock.minute = current_data["reminder_minute"]
+        
+        # Використовуємо .get(), щоб уникнути KeyError зі старими файлами збережень
+        self.ids.enable_switch.active = current_data.get("reminder_enabled", False)
+        self.ids.my_clock.hour = current_data.get("reminder_hour", 20)
+        self.ids.my_clock.minute = current_data.get("reminder_minute", 0)
 
     def save_time(self):
         self.on_save_callback(
@@ -502,16 +503,25 @@ class LensTrackerRoot(BoxLayout):
 
     def load_data(self):
         path = get_data_path(self.app)
+        defaults = default_data()
+        
         if os.path.exists(path):
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     self.data = json.load(f)
+                    
+                    # Заповнюємо відсутні ключі (міграція старих збережень на нову версію)
+                    for key, value in defaults.items():
+                        if key not in self.data:
+                            self.data[key] = value
+
+                    # Перевіряємо масив днів
                     if len(self.data.get("checked", [])) != TOTAL_DAYS:
                         self.data["checked"] = [False] * TOTAL_DAYS
             except Exception:
-                self.data = default_data()
+                self.data = defaults
         else:
-            self.data = default_data()
+            self.data = defaults
 
     def save_data(self):
         path = get_data_path(self.app)
