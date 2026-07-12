@@ -1,51 +1,345 @@
 # -*- coding: utf-8 -*-
 """
 Lens Tracker - застосунок для відстеження днів носіння контактних лінз.
-Бібліотеки: kivy (UI, повністю сумісний з buildozer), plyer (сповіщення).
+Візуально оновлена версія із заокругленим UI, календарем та аналоговим годинником.
 """
 
 import json
 import os
-from datetime import date, datetime
+import math
+import calendar
+from datetime import date
 
 from kivy.app import App
-from kivy.clock import Clock
+from kivy.utils import platform
+from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.label import Label
-from kivy.uix.button import Button
-from kivy.uix.checkbox import CheckBox
+from kivy.uix.widget import Widget
 from kivy.uix.popup import Popup
-from kivy.uix.spinner import Spinner
-from kivy.uix.scrollview import ScrollView
+from kivy.uix.togglebutton import ToggleButton
+from kivy.uix.label import Label
+from kivy.properties import NumericProperty, ObjectProperty, BooleanProperty, StringProperty
 from kivy.metrics import dp
-
-try:
-    from plyer import notification
-except Exception:
-    notification = None
 
 TOTAL_DAYS = 30
 DATA_FILE_NAME = "lens_data.json"
+MONTHS_UKR = ['Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень', 
+              'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень']
 
+# Візуальний стиль (KV Language)
+KV = '''
+#:import math math
+
+<RoundedButton@Button>:
+    background_color: 0, 0, 0, 0
+    background_normal: ''
+    color: 1, 1, 1, 1
+    # Захист від виходу тексту за межі:
+    text_size: self.width - dp(10), self.height - dp(10)
+    halign: 'center'
+    valign: 'middle'
+    font_size: '14sp'
+    canvas.before:
+        Color:
+            rgba: (0.1, 0.5, 0.7, 1) if self.state == 'normal' else (0.05, 0.35, 0.5, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(12)]
+
+<DayToggleButton@ToggleButton>:
+    background_color: 0, 0, 0, 0
+    background_normal: ''
+    background_down: ''
+    color: 1, 1, 1, 1
+    font_size: '15sp'
+    bold: True
+    text_size: self.width - dp(4), self.height - dp(4)
+    halign: 'center'
+    valign: 'middle'
+    canvas.before:
+        Color:
+            rgba: (0.2, 0.7, 0.4, 1) if self.state == 'down' else (0.3, 0.3, 0.35, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(8)]
+
+<AnalogClock>:
+    canvas:
+        # Фон циферблата
+        Color:
+            rgba: 0.85, 0.9, 0.95, 1
+        Ellipse:
+            pos: self.center_x - min(self.width, self.height)/2, self.center_y - min(self.width, self.height)/2
+            size: min(self.width, self.height), min(self.width, self.height)
+        
+        # Годинна стрілка
+        Color:
+            rgba: 0.2, 0.2, 0.2, 1
+        PushMatrix
+        Rotate:
+            angle: - (self.hour % 12 * 30 + self.minute * 0.5)
+            axis: 0, 0, 1
+            origin: self.center
+        Line:
+            points: [self.center_x, self.center_y, self.center_x, self.center_y + min(self.width, self.height)*0.25]
+            width: dp(4)
+            cap: 'round'
+        PopMatrix
+        
+        # Хвилинна стрілка
+        Color:
+            rgba: 0.1, 0.5, 0.7, 1
+        PushMatrix
+        Rotate:
+            angle: - (self.minute * 6)
+            axis: 0, 0, 1
+            origin: self.center
+        Line:
+            points: [self.center_x, self.center_y, self.center_x, self.center_y + min(self.width, self.height)*0.4]
+            width: dp(2)
+            cap: 'round'
+        PopMatrix
+        
+        # Центр стрілок
+        Color:
+            rgba: 0.9, 0.3, 0.3, 1
+        Ellipse:
+            pos: self.center_x - dp(6), self.center_y - dp(6)
+            size: dp(12), dp(12)
+
+<DatePickerPopup>:
+    title: "Вибір дати відкриття"
+    size_hint: 0.95, 0.7
+    title_align: 'center'
+    BoxLayout:
+        orientation: 'vertical'
+        spacing: dp(10)
+        padding: dp(10)
+        BoxLayout:
+            size_hint_y: None
+            height: dp(50)
+            RoundedButton:
+                text: '<'
+                size_hint_x: 0.2
+                on_release: root.change_month(-1)
+            Label:
+                id: month_year_label
+                text: ''
+                bold: True
+                font_size: '18sp'
+            RoundedButton:
+                text: '>'
+                size_hint_x: 0.2
+                on_release: root.change_month(1)
+        GridLayout:
+            id: days_grid
+            cols: 7
+            spacing: dp(4)
+        BoxLayout:
+            size_hint_y: None
+            height: dp(50)
+            spacing: dp(10)
+            RoundedButton:
+                text: 'Скасувати'
+                canvas.before:
+                    Color:
+                        rgba: 0.5, 0.5, 0.5, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(12)]
+                on_release: root.dismiss()
+            RoundedButton:
+                text: 'Зберегти'
+                on_release: root.save_date()
+
+<TimePickerPopup>:
+    title: "Налаштування сповіщень"
+    size_hint: 0.95, 0.85
+    title_align: 'center'
+    BoxLayout:
+        orientation: 'vertical'
+        spacing: dp(15)
+        padding: dp(10)
+        BoxLayout:
+            size_hint_y: None
+            height: dp(48)
+            Label:
+                text: "Увімкнути нагадування:"
+                text_size: self.size
+                halign: 'left'
+                valign: 'middle'
+            Switch:
+                id: enable_switch
+                active: root.reminder_enabled
+        Label:
+            text: f"{root.hour:02d}:{root.minute:02d}"
+            font_size: '42sp'
+            bold: True
+            size_hint_y: None
+            height: dp(50)
+            color: 0.1, 0.5, 0.7, 1
+        BoxLayout:
+            size_hint_y: None
+            height: dp(40)
+            spacing: dp(10)
+            RoundedButton:
+                text: 'Години'
+                on_release: clock.time_mode = 'hour'
+                canvas.before:
+                    Color:
+                        rgba: (0.1, 0.5, 0.7, 1) if clock.time_mode == 'hour' else (0.3, 0.3, 0.3, 1)
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(10)]
+            RoundedButton:
+                text: 'Хвилини'
+                on_release: clock.time_mode = 'minute'
+                canvas.before:
+                    Color:
+                        rgba: (0.1, 0.5, 0.7, 1) if clock.time_mode == 'minute' else (0.3, 0.3, 0.3, 1)
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(10)]
+        AnalogClock:
+            id: clock
+            hour: root.hour
+            minute: root.minute
+            on_hour: root.hour = self.hour
+            on_minute: root.minute = self.minute
+        BoxLayout:
+            size_hint_y: None
+            height: dp(50)
+            spacing: dp(10)
+            RoundedButton:
+                text: 'Скасувати'
+                canvas.before:
+                    Color:
+                        rgba: 0.5, 0.5, 0.5, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(12)]
+                on_release: root.dismiss()
+            RoundedButton:
+                text: 'Зберегти'
+                on_release: root.save_time()
+
+<ConfirmPopup>:
+    title: "Підтвердження"
+    size_hint: 0.85, 0.35
+    title_align: 'center'
+    BoxLayout:
+        orientation: "vertical"
+        spacing: dp(10)
+        padding: dp(10)
+        Label:
+            text: "Ви справді хочете скинути дані?\\nВесь прогрес буде видалено."
+            halign: "center"
+            valign: "middle"
+            text_size: self.size
+        BoxLayout:
+            spacing: dp(10)
+            size_hint_y: None
+            height: dp(50)
+            RoundedButton:
+                text: "Скасувати"
+                canvas.before:
+                    Color:
+                        rgba: 0.5, 0.5, 0.5, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(12)]
+                on_release: root.dismiss()
+            RoundedButton:
+                text: "Так, скинути"
+                canvas.before:
+                    Color:
+                        rgba: 0.8, 0.2, 0.2, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(12)]
+                on_release: root.confirm_action()
+
+<LensTrackerRoot>:
+    orientation: "vertical"
+    spacing: dp(10)
+    padding: dp(15)
+    canvas.before:
+        Color:
+            rgba: 0.08, 0.1, 0.12, 1  # Темний сучасний фон
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    Label:
+        id: date_label
+        text: ""
+        size_hint_y: None
+        height: dp(30)
+        font_size: "16sp"
+        color: 0.7, 0.8, 0.9, 1
+
+    Label:
+        id: days_left_label
+        text: ""
+        size_hint_y: None
+        height: dp(60)
+        font_size: "24sp"
+        bold: True
+        color: 0.2, 0.8, 0.4, 1
+        text_size: self.size
+        halign: 'center'
+        valign: 'middle'
+
+    RoundedButton:
+        text: "Змінити дату відкриття коробки"
+        size_hint_y: None
+        height: dp(50)
+        on_release: root.open_date_popup()
+
+    ScrollView:
+        GridLayout:
+            id: checkbox_grid
+            cols: 5
+            spacing: dp(8)
+            size_hint_y: None
+            height: self.minimum_height
+            padding: dp(5)
+
+    BoxLayout:
+        size_hint_y: None
+        height: dp(55)
+        spacing: dp(10)
+        RoundedButton:
+            text: "Сповіщення"
+            on_release: root.open_reminder_popup()
+        RoundedButton:
+            text: "Скинути дані"
+            canvas.before:
+                Color:
+                    rgba: (0.8, 0.3, 0.3, 1) if self.state == 'normal' else (0.6, 0.2, 0.2, 1)
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(12)]
+            on_release: root.open_reset_popup()
+'''
+
+Builder.load_string(KV)
+
+# ---------- Функції зберігання даних ----------
 
 def get_data_path(app):
-    """
-    Шлях до файлу даних у ПРИВАТНОМУ внутрішньому сховищі застосунку.
-
-    app.user_data_dir - це офіційний механізм Kivy:
-    - на Android це внутрішня папка застосунку
-      (аналог /data/data/<package.domain>.<package.name>/files),
-      куди дозволено писати БЕЗ будь-яких дозволів (permissions);
-    - на Windows/Linux/Mac це папка типу
-      ~/.local/share/<AppName> або %APPDATA%/<AppName>.
-    Ніякого доступу до "кореня програми" (APK, який лише для читання)
-    тут немає і не використовується.
-    """
     base = app.user_data_dir
     os.makedirs(base, exist_ok=True)
     return os.path.join(base, DATA_FILE_NAME)
-
 
 def default_data():
     today = date.today()
@@ -60,208 +354,153 @@ def default_data():
         "last_notified_date": "",
     }
 
+# ---------- Логіка Кастомних Віджетів ----------
+
+class AnalogClock(Widget):
+    """Віджет аналогового годинника для інтерактивного вибору часу."""
+    hour = NumericProperty(12)
+    minute = NumericProperty(0)
+    time_mode = StringProperty('hour')
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            self.update_time(touch)
+            return True
+
+    def on_touch_move(self, touch):
+        if self.collide_point(*touch.pos):
+            self.update_time(touch)
+            return True
+
+    def update_time(self, touch):
+        cx, cy = self.center
+        dx = touch.x - cx
+        dy = touch.y - cy
+        
+        # Обчислюємо кут відносно 12 годин (верх)
+        angle = math.degrees(math.atan2(dx, dy))
+        if angle < 0: 
+            angle += 360
+
+        if self.time_mode == 'hour':
+            h = int((angle + 15) // 30) % 12
+            if h == 0: 
+                h = 12
+            self.hour = h
+        else:
+            m = int((angle + 3) // 6) % 60
+            self.minute = m
+
+class DatePickerPopup(Popup):
+    """Календар для вибору дати."""
+    def __init__(self, current_data, on_save_callback, **kwargs):
+        super().__init__(**kwargs)
+        self.on_save_callback = on_save_callback
+        self.selected_date = date(
+            current_data["open_year"], 
+            current_data["open_month"], 
+            current_data["open_day"]
+        )
+        self.display_date = self.selected_date
+        self.populate_grid()
+
+    def populate_grid(self):
+        grid = self.ids.days_grid
+        grid.clear_widgets()
+        
+        month_str = MONTHS_UKR[self.display_date.month - 1]
+        self.ids.month_year_label.text = f"{month_str} {self.display_date.year}"
+
+        for d in ['Пн', 'Вв', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд']:
+            grid.add_widget(Label(text=d, bold=True, size_hint_y=None, height=dp(30)))
+
+        first_day, num_days = calendar.monthrange(self.display_date.year, self.display_date.month)
+        
+        for _ in range(first_day):
+            grid.add_widget(Label()) 
+
+        for day in range(1, num_days + 1):
+            btn = ToggleButton(
+                text=str(day),
+                group='calendar_days',
+                state='down' if (day == self.selected_date.day and 
+                                 self.display_date.month == self.selected_date.month and 
+                                 self.display_date.year == self.selected_date.year) else 'normal'
+            )
+            # Прив'язка лямбда-функції
+            btn.bind(on_release=lambda b, d=day: self.select_day(d))
+            
+            # Стиль для кнопок календаря
+            btn.background_color = (0,0,0,0)
+            btn.background_normal = ''
+            btn.background_down = ''
+            grid.add_widget(btn)
+
+    def select_day(self, day):
+        self.selected_date = self.display_date.replace(day=day)
+
+    def change_month(self, step):
+        m = self.display_date.month - 1 + step
+        y = self.display_date.year + m // 12
+        m = m % 12 + 1
+        self.display_date = date(y, m, 1)
+        self.populate_grid()
+
+    def save_date(self):
+        self.on_save_callback(self.selected_date.day, self.selected_date.month, self.selected_date.year)
+        self.dismiss()
+
+class TimePickerPopup(Popup):
+    """Спливаюче вікно для налаштувань часу та сповіщень."""
+    reminder_enabled = BooleanProperty(False)
+    hour = NumericProperty(12)
+    minute = NumericProperty(0)
+
+    def __init__(self, current_data, on_save_callback, **kwargs):
+        super().__init__(**kwargs)
+        self.on_save_callback = on_save_callback
+        self.reminder_enabled = current_data["reminder_enabled"]
+        self.hour = current_data["reminder_hour"]
+        self.minute = current_data["reminder_minute"]
+
+    def save_time(self):
+        self.on_save_callback(self.ids.enable_switch.active, self.hour, self.minute)
+        self.dismiss()
 
 class ConfirmPopup(Popup):
-    """Спливаюче вікно підтвердження дії (для скидання даних)."""
-
-    def __init__(self, on_confirm, **kwargs):
+    def __init__(self, on_confirm_callback, **kwargs):
         super().__init__(**kwargs)
-        self.title = "Підтвердження"
-        self.size_hint = (0.85, 0.35)
-        self.auto_dismiss = False
+        self.on_confirm_callback = on_confirm_callback
 
-        layout = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(10))
-        layout.add_widget(Label(
-            text="Ви справді хочете скинути дані?\nВесь прогрес носіння лінз буде видалено.",
-            halign="center"
-        ))
+    def confirm_action(self):
+        self.on_confirm_callback()
+        self.dismiss()
 
-        btn_row = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(48))
-        yes_btn = Button(text="Так, скинути")
-        no_btn = Button(text="Скасувати")
-
-        def confirm(_instance):
-            self.dismiss()
-            on_confirm()
-
-        def cancel(_instance):
-            self.dismiss()
-
-        yes_btn.bind(on_release=confirm)
-        no_btn.bind(on_release=cancel)
-
-        btn_row.add_widget(no_btn)
-        btn_row.add_widget(yes_btn)
-
-        layout.add_widget(btn_row)
-        self.content = layout
-
-
-class DatePopup(Popup):
-    """Вибір дати відкриття коробки лінз."""
-
-    def __init__(self, current, on_save, **kwargs):
-        super().__init__(**kwargs)
-        self.title = "Дата відкриття коробки"
-        self.size_hint = (0.9, 0.5)
-        self.auto_dismiss = False
-
-        layout = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(10))
-
-        row = BoxLayout(spacing=dp(5), size_hint_y=None, height=dp(48))
-        days = [str(d) for d in range(1, 32)]
-        months = [str(m) for m in range(1, 13)]
-        years = [str(y) for y in range(date.today().year - 1, date.today().year + 2)]
-
-        self.day_spinner = Spinner(text=str(current["open_day"]), values=days)
-        self.month_spinner = Spinner(text=str(current["open_month"]), values=months)
-        self.year_spinner = Spinner(text=str(current["open_year"]), values=years)
-
-        row.add_widget(Label(text="День:"))
-        row.add_widget(self.day_spinner)
-        row.add_widget(Label(text="Місяць:"))
-        row.add_widget(self.month_spinner)
-        row.add_widget(Label(text="Рік:"))
-        row.add_widget(self.year_spinner)
-
-        layout.add_widget(row)
-
-        btn_row = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(48))
-        save_btn = Button(text="Зберегти")
-        cancel_btn = Button(text="Скасувати")
-
-        def save(_instance):
-            self.dismiss()
-            on_save(
-                int(self.day_spinner.text),
-                int(self.month_spinner.text),
-                int(self.year_spinner.text),
-            )
-
-        def cancel(_instance):
-            self.dismiss()
-
-        save_btn.bind(on_release=save)
-        cancel_btn.bind(on_release=cancel)
-        btn_row.add_widget(cancel_btn)
-        btn_row.add_widget(save_btn)
-        layout.add_widget(btn_row)
-
-        self.content = layout
-
-
-class ReminderPopup(Popup):
-    """Налаштування сповіщень (час і увімкнення/вимкнення)."""
-
-    def __init__(self, current, on_save, **kwargs):
-        super().__init__(**kwargs)
-        self.title = "Налаштування сповіщень"
-        self.size_hint = (0.9, 0.5)
-        self.auto_dismiss = False
-
-        layout = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(10))
-
-        enable_row = BoxLayout(size_hint_y=None, height=dp(48))
-        self.enable_checkbox = CheckBox(active=current["reminder_enabled"])
-        enable_row.add_widget(Label(text="Увімкнути щоденне нагадування"))
-        enable_row.add_widget(self.enable_checkbox)
-        layout.add_widget(enable_row)
-
-        time_row = BoxLayout(size_hint_y=None, height=dp(48))
-        hours = [f"{h:02d}" for h in range(24)]
-        minutes = [f"{m:02d}" for m in range(0, 60, 5)]
-        self.hour_spinner = Spinner(text=f'{current["reminder_hour"]:02d}', values=hours)
-        self.minute_spinner = Spinner(text=f'{current["reminder_minute"]:02d}', values=minutes)
-        time_row.add_widget(Label(text="Час нагадування:"))
-        time_row.add_widget(self.hour_spinner)
-        time_row.add_widget(Label(text=":"))
-        time_row.add_widget(self.minute_spinner)
-        layout.add_widget(time_row)
-
-        layout.add_widget(Label(
-            text="Нагадування спрацьовує, поки застосунок відкритий\n"
-                 "або працює у фоні на пристрої.",
-            font_size="12sp"
-        ))
-
-        btn_row = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(48))
-        save_btn = Button(text="Зберегти")
-        cancel_btn = Button(text="Скасувати")
-
-        def save(_instance):
-            self.dismiss()
-            on_save(
-                self.enable_checkbox.active,
-                int(self.hour_spinner.text),
-                int(self.minute_spinner.text),
-            )
-
-        def cancel(_instance):
-            self.dismiss()
-
-        save_btn.bind(on_release=save)
-        cancel_btn.bind(on_release=cancel)
-        btn_row.add_widget(cancel_btn)
-        btn_row.add_widget(save_btn)
-        layout.add_widget(btn_row)
-
-        self.content = layout
-
+# ---------- Головний інтерфейс ----------
 
 class LensTrackerRoot(BoxLayout):
     def __init__(self, app, **kwargs):
-        super().__init__(orientation="vertical", spacing=dp(8), padding=dp(12), **kwargs)
+        super().__init__(**kwargs)
         self.app = app
         self.data = None
         self.checkboxes = []
-
-        self.date_label = Label(
-            text="", size_hint_y=None, height=dp(30), font_size="16sp"
-        )
-        self.days_left_label = Label(
-            text="", size_hint_y=None, height=dp(40), font_size="22sp", bold=True
-        )
-
-        self.add_widget(self.date_label)
-        self.add_widget(self.days_left_label)
-
-        date_btn = Button(
-            text="Змінити дату відкриття коробки", size_hint_y=None, height=dp(44)
-        )
-        date_btn.bind(on_release=lambda _i: self.open_date_popup())
-        self.add_widget(date_btn)
-
-        # Сітка 30 чекбоксів (5 колонок x 6 рядків)
-        scroll = ScrollView(size_hint=(1, 1))
-        grid = GridLayout(cols=5, spacing=dp(6), size_hint_y=None)
-        grid.bind(minimum_height=grid.setter("height"))
-
-        for i in range(TOTAL_DAYS):
-            cell = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(70))
-            lbl = Label(text=f"День {i + 1}", font_size="12sp", size_hint_y=None, height=dp(20))
-            cb = CheckBox(size_hint_y=None, height=dp(40))
-            cb.bind(active=self.make_checkbox_callback(i))
-            cell.add_widget(lbl)
-            cell.add_widget(cb)
-            grid.add_widget(cell)
-            self.checkboxes.append(cb)
-
-        scroll.add_widget(grid)
-        self.add_widget(scroll)
-
-        bottom_row = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
-        reminder_btn = Button(text="Налаштування сповіщень")
-        reset_btn = Button(text="Скинути дані")
-        reminder_btn.bind(on_release=lambda _i: self.open_reminder_popup())
-        reset_btn.bind(on_release=lambda _i: self.open_reset_popup())
-        bottom_row.add_widget(reminder_btn)
-        bottom_row.add_widget(reset_btn)
-        self.add_widget(bottom_row)
-
+        
         self.load_data()
+        self.build_grid()
         self.refresh_ui()
 
-    # ---------- Дані ----------
+    def build_grid(self):
+        grid = self.ids.checkbox_grid
+        grid.bind(minimum_height=grid.setter("height"))
+        for i in range(TOTAL_DAYS):
+            # Використовуємо ToggleButton замість дрібного CheckBox
+            cb = Builder.template('DayToggleButton')
+            cb.text = f"День\\n{i + 1}"
+            cb.size_hint_y = None
+            cb.height = dp(75)
+            cb.bind(state=self.make_checkbox_callback(i))
+            grid.add_widget(cb)
+            self.checkboxes.append(cb)
 
     def load_data(self):
         path = get_data_path(self.app)
@@ -281,31 +520,30 @@ class LensTrackerRoot(BoxLayout):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(self.data, f, ensure_ascii=False, indent=2)
 
-    # ---------- UI-логіка ----------
-
     def make_checkbox_callback(self, index):
-        def callback(_checkbox, value):
-            self.data["checked"][index] = value
+        def callback(checkbox, value):
+            self.data["checked"][index] = (value == 'down')
             self.save_data()
             self.update_days_left()
         return callback
 
     def refresh_ui(self):
         d, m, y = self.data["open_day"], self.data["open_month"], self.data["open_year"]
-        self.date_label.text = f"Дата відкриття коробки: {d:02d}.{m:02d}.{y}"
+        self.ids.date_label.text = f"Відкрито: {d:02d}.{m:02d}.{y}"
+        
         for i, cb in enumerate(self.checkboxes):
-            cb.active = self.data["checked"][i]
+            cb.state = 'down' if self.data["checked"][i] else 'normal'
         self.update_days_left()
 
     def update_days_left(self):
         worn = sum(1 for v in self.data["checked"] if v)
         left = max(0, TOTAL_DAYS - worn)
         if left == 0:
-            self.days_left_label.text = "Термін носіння лінз завершено! Час замінити лінзи."
+            self.ids.days_left_label.text = "Час замінити лінзи!"
+            self.ids.days_left_label.color = (1, 0.4, 0.4, 1)
         else:
-            self.days_left_label.text = f"Залишилось днів носіння: {left}"
-
-    # ---------- Попапи ----------
+            self.ids.days_left_label.text = f"Залишилось днів: {left}"
+            self.ids.days_left_label.color = (0.2, 0.8, 0.4, 1)
 
     def open_date_popup(self):
         def on_save(d, m, y):
@@ -314,8 +552,7 @@ class LensTrackerRoot(BoxLayout):
             self.data["open_year"] = y
             self.save_data()
             self.refresh_ui()
-
-        DatePopup(self.data, on_save).open()
+        DatePickerPopup(self.data, on_save).open()
 
     def open_reminder_popup(self):
         def on_save(enabled, hour, minute):
@@ -323,52 +560,33 @@ class LensTrackerRoot(BoxLayout):
             self.data["reminder_hour"] = hour
             self.data["reminder_minute"] = minute
             self.save_data()
-
-        ReminderPopup(self.data, on_save).open()
+        TimePickerPopup(self.data, on_save).open()
 
     def open_reset_popup(self):
         def on_confirm():
             self.data = default_data()
             self.save_data()
             self.refresh_ui()
-
         ConfirmPopup(on_confirm).open()
-
-    # ---------- Перевірка нагадувань ----------
-
-    def check_reminder(self, _dt):
-        if not self.data.get("reminder_enabled"):
-            return
-        now = datetime.now()
-        today_str = now.strftime("%Y-%m-%d")
-        if (
-            now.hour == self.data.get("reminder_hour")
-            and now.minute == self.data.get("reminder_minute")
-            and self.data.get("last_notified_date") != today_str
-        ):
-            self.data["last_notified_date"] = today_str
-            self.save_data()
-            self.send_notification()
-
-    def send_notification(self):
-        if notification is None:
-            return
-        try:
-            notification.notify(
-                title="Нагадування про лінзи",
-                message="Не забудьте відмітити сьогоднішній день носіння лінз!",
-                timeout=10,
-            )
-        except Exception:
-            pass
 
 
 class LensTrackerApp(App):
     def build(self):
         self.title = "Lens Tracker"
         self.root_widget = LensTrackerRoot(self)
-        Clock.schedule_interval(self.root_widget.check_reminder, 30)
+        self.start_notifier_service()
         return self.root_widget
+
+    def start_notifier_service(self):
+        if platform != "android":
+            return
+        try:
+            from jnius import autoclass
+            service = autoclass("org.example.lenstracker.ServiceNotifier")
+            python_activity = autoclass("org.kivy.android.PythonActivity")
+            service.start(python_activity.mActivity, "")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
