@@ -19,7 +19,8 @@ from kivy.uix.widget import Widget
 from kivy.uix.popup import Popup
 from kivy.uix.togglebutton import ToggleButton
 from kivy.uix.label import Label
-from kivy.properties import NumericProperty, StringProperty
+# ДОДАНО: BooleanProperty для безпечної ініціалізації вікна сповіщень
+from kivy.properties import NumericProperty, StringProperty, BooleanProperty
 from kivy.metrics import dp
 
 TOTAL_DAYS = 30
@@ -186,6 +187,8 @@ KV = '''
                 valign: 'middle'
             Switch:
                 id: enable_switch
+                # ОНОВЛЕНО: безпечна прив'язка до властивості
+                active: root.start_enabled
         Label:
             text: "%02d:%02d" % (my_clock.hour, my_clock.minute)
             font_size: '42sp'
@@ -219,6 +222,9 @@ KV = '''
                         radius: [dp(10)]
         AnalogClock:
             id: my_clock
+            # ОНОВЛЕНО: безпечна прив'язка до властивостей
+            hour: root.start_hour
+            minute: root.start_minute
         BoxLayout:
             size_hint_y: None
             height: dp(50)
@@ -450,14 +456,19 @@ class DatePickerPopup(Popup):
         self.dismiss()
 
 class TimePickerPopup(Popup):
+    # ОНОВЛЕНО: Використовуємо властивості для безпечної ініціалізації
+    start_enabled = BooleanProperty(False)
+    start_hour = NumericProperty(20)
+    start_minute = NumericProperty(0)
+
     def __init__(self, current_data, on_save_callback, **kwargs):
+        # Встановлюємо значення ПЕРЕД викликом super(), щоб Kivy безпечно підтягнув їх у KV
+        self.start_enabled = current_data.get("reminder_enabled", False)
+        self.start_hour = current_data.get("reminder_hour", 20)
+        self.start_minute = current_data.get("reminder_minute", 0)
+        
         super().__init__(**kwargs)
         self.on_save_callback = on_save_callback
-        
-        # Використовуємо .get(), щоб уникнути KeyError зі старими файлами збережень
-        self.ids.enable_switch.active = current_data.get("reminder_enabled", False)
-        self.ids.my_clock.hour = current_data.get("reminder_hour", 20)
-        self.ids.my_clock.minute = current_data.get("reminder_minute", 0)
 
     def save_time(self):
         self.on_save_callback(
@@ -502,6 +513,7 @@ class LensTrackerRoot(BoxLayout):
             self.checkboxes.append(cb)
 
     def load_data(self):
+        # ОНОВЛЕНО: безпечне читання та міграція старих збережень
         path = get_data_path(self.app)
         defaults = default_data()
         
@@ -510,12 +522,11 @@ class LensTrackerRoot(BoxLayout):
                 with open(path, "r", encoding="utf-8") as f:
                     self.data = json.load(f)
                     
-                    # Заповнюємо відсутні ключі (міграція старих збережень на нову версію)
+                    # Заповнюємо відсутні ключі (наприклад, якщо файл створено до додавання сповіщень)
                     for key, value in defaults.items():
                         if key not in self.data:
                             self.data[key] = value
 
-                    # Перевіряємо масив днів
                     if len(self.data.get("checked", [])) != TOTAL_DAYS:
                         self.data["checked"] = [False] * TOTAL_DAYS
             except Exception:
