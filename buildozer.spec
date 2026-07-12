@@ -21,8 +21,13 @@ android.api = 33
 android.ndk = 25b
 android.archs = arm64-v8a
 
-# Дозволи: сповіщення (Android 13+ вимагає окремий дозвіл)
-android.permissions = POST_NOTIFICATIONS
+# Дозволи: сповіщення (Android 13+) та фонова служба
+android.permissions = POST_NOTIFICATIONS,FOREGROUND_SERVICE
+
+# Фонова служба, що надсилає сповіщення навіть коли застосунок закритий.
+# ":foreground" означає, що Android покаже постійне сповіщення про роботу
+# служби (це вимога Android для будь-якої довготривалої фонової служби).
+services = Notifier:services/notifier.py:foreground
 
 # Автоприйняття ліцензій Android SDK при першій збірці
 android.accept_sdk_license = True
