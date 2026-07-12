@@ -15,8 +15,6 @@ requirements = python3,kivy==2.3.0,plyer
 orientation = portrait
 fullscreen = 0
 
-icon.filename = %(source.dir)s/icon.png
-
 [buildozer]
 log_level = 2
 warn_on_root = 1
@@ -26,7 +24,7 @@ warn_on_root = 1
 android.minapi = 21
 android.api = 33
 android.ndk = 25b
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a
 
 # Дозволи: сповіщення (Android 13+ вимагає окремий дозвіл) та вібрація/вихід у мережу не потрібні
 android.permissions = POST_NOTIFICATIONS
